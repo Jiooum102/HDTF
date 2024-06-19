@@ -17,6 +17,7 @@ You need tqdm and youtube-dl libraries to be installed for this script to work.
 import os
 import argparse
 import shutil
+import uuid
 from typing import List, Dict
 from multiprocessing import Pool
 import subprocess
@@ -26,6 +27,7 @@ from urllib import parse
 from pytube import YouTube
 from tqdm import tqdm
 
+from fvutils.media import has_audio, merge_video_with_audio
 
 subsets = ["RD", "WDA", "WRA"]
 
@@ -178,7 +180,25 @@ def download_video(video_id, download_path, resolution: int=None, video_format="
         else:
             selected_stream.download(output_path=save_folder, filename_prefix=save_prefix)
 
-        shutil.move(save_path, download_path)
+        # With audio
+        if not has_audio(save_path):
+            audio_stream = yt.streams.filter(only_audio=True).order_by("bitrate").last()
+            audio_path = audio_stream.download(output_path=save_folder, filename_prefix=f"{uuid.uuid4()}_")
+
+            # Merge video with audio
+            merge_video_with_audio(
+                video_path=save_path,
+                audio_path=audio_path,
+                output_path=download_path,
+                check_duration=False,
+            )
+            if os.path.isfile(audio_path):
+                os.remove(audio_path)
+            if os.path.isfile(save_path):
+                os.remove(save_path)
+        else:
+            shutil.move(save_path, download_path)
+
     except Exception as e:
         print(e)
         return False
