@@ -16,12 +16,14 @@ You need tqdm and youtube-dl libraries to be installed for this script to work.
 
 import os
 import argparse
+import shutil
 from typing import List, Dict
 from multiprocessing import Pool
 import subprocess
 from subprocess import Popen, PIPE
 from urllib import parse
 
+from pytube import YouTube
 from tqdm import tqdm
 
 
@@ -161,26 +163,27 @@ def download_video(video_id, download_path, resolution: int=None, video_format="
     """
     # if os.path.isfile(download_path): return True # File already exists
 
-    if log_file is None:
-        stderr = subprocess.DEVNULL
-    else:
-        stderr = open(log_file, "a")
-    video_selection = f"bestvideo[ext={video_format}]"
-    video_selection = video_selection if resolution is None else f"{video_selection}[height={resolution}]"
-    command = [
-        "youtube-dl",
-        "https://youtube.com/watch?v={}".format(video_id), "--quiet", "-f",
-        video_selection,
-        "--output", download_path,
-        "--no-continue"
-    ]
-    return_code = subprocess.call(command, stderr=stderr)
-    success = return_code == 0
+    try:
+        save_folder = os.path.dirname(download_path)
+        url = "http://www.youtube.com/watch?v=" + str(video_id)
+        yt = YouTube(url)
+        if resolution is None:
+            selected_stream = yt.streams.filter(file_extension=video_format).order_by('resolution').last()
+        else:
+            selected_stream = yt.streams.filter(file_extension=video_format, resolution=f"{resolution}p").order_by('resolution').last()
+        save_prefix = video_id + "_"
+        save_path = selected_stream.get_file_path(output_path=save_folder, filename_prefix=save_prefix)
+        if os.path.exists(save_path):
+            print(f"File existed in: {save_path}")
+        else:
+            selected_stream.download(output_path=save_folder, filename_prefix=save_prefix)
 
-    if log_file is not None:
-        stderr.close()
+        shutil.move(save_path, download_path)
+    except Exception as e:
+        print(e)
+        return False
 
-    return success and os.path.isfile(download_path)
+    return os.path.isfile(download_path)
 
 
 def get_video_resolution(video_path: os.PathLike) -> int:
